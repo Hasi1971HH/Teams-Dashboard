@@ -253,6 +253,7 @@ def build_adaptive_card(jira: dict, intercom: dict, report_date: str) -> dict:
             "facts": [
                 {"title": "Open Conversations", "value": str(intercom["open_conversations"])},
                 {"title": "CSAT Score", "value": csat_text},
+                {"title": "", "value": "_(based on last 7 days)_"},
             ],
         },
         {
