@@ -77,7 +77,7 @@ def fetch_jira_open_tickets(base_url: str, email: str, token: str, project_keys:
         "maxResults": 0,
         "fields": "summary",
     })
-    url = f"{base_url.rstrip('/')}/rest/api/3/search?{params}"
+    url = f"{base_url.rstrip('/')}/rest/api/3/search/jql?{params}"
 
     data = http_get(url, headers)
     total = data.get("total", 0)
@@ -88,7 +88,7 @@ def fetch_jira_open_tickets(base_url: str, email: str, token: str, project_keys:
         "maxResults": 50,
         "fields": "priority,status,assignee",
     })
-    url_detail = f"{base_url.rstrip('/')}/rest/api/3/search?{params_detail}"
+    url_detail = f"{base_url.rstrip('/')}/rest/api/3/search/jql?{params_detail}"
     detail = http_get(url_detail, headers)
 
     priority_counts: dict[str, int] = {}
