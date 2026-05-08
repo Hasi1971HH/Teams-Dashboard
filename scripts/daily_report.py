@@ -257,15 +257,26 @@ def fetch_intercom_nps(token: str) -> dict:
 
     try:
         with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
-            answer_files = [n for n in zf.namelist() if n.lower().startswith("answer_") and not "combined" in n.lower() and n.lower().endswith(".csv")]
+            # Match answer CSVs regardless of directory prefix or exact naming:
+            # e.g. 'answer.csv', 'answer_12345.csv', 'company_answer_12345.csv'
+            answer_files = [
+                n for n in zf.namelist()
+                if "answer" in n.lower().split("/")[-1]
+                and "combined" not in n.lower()
+                and n.lower().endswith(".csv")
+            ]
             for name in answer_files:
                 with zf.open(name) as f:
                     reader = csv.DictReader(io.TextIOWrapper(f, encoding="utf-8-sig"))
                     for row in reader:
-                        if row.get("response_type") != "rating_scale":
+                        # Intercom exports use 'response_type' or 'answer_type' depending on version
+                        row_type = (row.get("response_type") or row.get("answer_type") or "").strip().lower()
+                        if row_type not in ("rating_scale", "rating"):
                             continue
+                        # Value column is 'response' or 'value' depending on export version
+                        row_value = row.get("response") or row.get("value") or ""
                         try:
-                            score = int(str(row.get("response", "")).strip())
+                            score = int(str(row_value).strip())
                             if 0 <= score <= 10:
                                 scores.append(score)
                         except (ValueError, AttributeError):
