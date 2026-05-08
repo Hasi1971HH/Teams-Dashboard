@@ -119,6 +119,8 @@ def fetch_intercom_open_conversations(token: str) -> dict:
 
     # Non-closed conversations — per_page=1 so total_pages == total matching items
     data_open = http_get("https://api.intercom.io/conversations?state=open&per_page=1", headers)
+    debug_keys = {k: v for k, v in data_open.items() if k != "conversations"}
+    print(f"  Intercom response (no conversations): {debug_keys}")
     total_open = (data_open.get("pages") or {}).get("total_pages", 0)
 
     # CSAT: fetch recent ratings via conversations rated endpoint
