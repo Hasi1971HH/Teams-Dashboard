@@ -250,28 +250,26 @@ def fetch_intercom_nps(token: str) -> dict:
         print(f"NPS export download failed: {e}", file=sys.stderr)
         return {"nps_score": None, "nps_count": 0}
 
-    # Parse all CSVs in the ZIP looking for NPS question columns.
-    # NPS questions use a 0–10 scale and typically contain these keywords:
-    NPS_KEYWORDS = ("recommend", "likely", "nps", "weiteremp", "wahrscheinlich")
+    # Parse answer.csv: filter rows with response_type=rating_scale and a 0–10 score.
+    # This is language-agnostic — Intercom marks NPS questions as rating_scale regardless
+    # of the survey language.
     scores: list[int] = []
 
     try:
         with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
-            for name in zf.namelist():
-                if not name.lower().endswith(".csv"):
-                    continue
+            answer_files = [n for n in zf.namelist() if n.lower().startswith("answer_") and not "combined" in n.lower() and n.lower().endswith(".csv")]
+            for name in answer_files:
                 with zf.open(name) as f:
                     reader = csv.DictReader(io.TextIOWrapper(f, encoding="utf-8-sig"))
                     for row in reader:
-                        for col, val in row.items():
-                            if not any(kw in col.lower() for kw in NPS_KEYWORDS):
-                                continue
-                            try:
-                                score = int(str(val).strip())
-                                if 0 <= score <= 10:
-                                    scores.append(score)
-                            except (ValueError, AttributeError):
-                                pass
+                        if row.get("response_type") != "rating_scale":
+                            continue
+                        try:
+                            score = int(str(row.get("response", "")).strip())
+                            if 0 <= score <= 10:
+                                scores.append(score)
+                        except (ValueError, AttributeError):
+                            pass
     except Exception as e:
         print(f"NPS ZIP parsing failed: {e}", file=sys.stderr)
         return {"nps_score": None, "nps_count": 0}
