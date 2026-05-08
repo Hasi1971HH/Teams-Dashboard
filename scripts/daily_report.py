@@ -165,16 +165,16 @@ def build_adaptive_card(jira: dict, intercom: dict, report_date: str) -> dict:
     # CSAT display
     if intercom["csat_avg"] is not None:
         stars = "⭐" * round(intercom["csat_avg"])
-        csat_text = f"{intercom['csat_avg']:.1f} / 5  {stars}  ({intercom['csat_count']} Bewertungen)"
+        csat_text = f"{intercom['csat_avg']:.1f} / 5  {stars}  ({intercom['csat_count']} ratings)"
     else:
-        csat_text = "Keine Daten"
+        csat_text = "No data"
 
     project_label = "AD, ANA, ACM, CORE, ENG, INFRA, SUP, KB, PM, PUB, SYNC"
 
     card_body = [
         {
             "type": "TextBlock",
-            "text": f"📊 Täglicher Report – {report_date}",
+            "text": f"📊 Daily Report – {report_date}",
             "weight": "Bolder",
             "size": "Large",
             "wrap": True,
@@ -189,7 +189,7 @@ def build_adaptive_card(jira: dict, intercom: dict, report_date: str) -> dict:
         },
         {
             "type": "TextBlock",
-            "text": f"Projekte: {project_label}",
+            "text": f"Projects: {project_label}",
             "isSubtle": True,
             "size": "Small",
             "spacing": "None",
@@ -197,8 +197,8 @@ def build_adaptive_card(jira: dict, intercom: dict, report_date: str) -> dict:
         {
             "type": "FactSet",
             "facts": [
-                {"title": "Offene Tickets gesamt", "value": str(jira["total"])},
-                {"title": "Nicht zugewiesen", "value": str(jira["unassigned"])},
+                {"title": "Open tickets total", "value": str(jira["total"])},
+                {"title": "Unassigned", "value": str(jira["unassigned"])},
             ] + priority_facts,
         },
         # Intercom section
@@ -211,7 +211,7 @@ def build_adaptive_card(jira: dict, intercom: dict, report_date: str) -> dict:
         },
         {
             "type": "TextBlock",
-            "text": "Support-Übersicht",
+            "text": "Support Overview",
             "isSubtle": True,
             "size": "Small",
             "spacing": "None",
@@ -219,13 +219,13 @@ def build_adaptive_card(jira: dict, intercom: dict, report_date: str) -> dict:
         {
             "type": "FactSet",
             "facts": [
-                {"title": "Offene Conversations", "value": str(intercom["open_conversations"])},
+                {"title": "Open Conversations", "value": str(intercom["open_conversations"])},
                 {"title": "CSAT Score", "value": csat_text},
             ],
         },
         {
             "type": "TextBlock",
-            "text": f"Generiert am {report_date} · automatisch via GitHub Actions",
+            "text": f"Generated on {report_date} · automated via GitHub Actions",
             "isSubtle": True,
             "size": "Small",
             "wrap": True,
