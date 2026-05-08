@@ -74,7 +74,7 @@ def fetch_jira_open_tickets(base_url: str, email: str, token: str, project_keys:
 
     params = urllib.parse.urlencode({
         "jql": jql,
-        "maxResults": 0,
+        "maxResults": 1,
         "fields": "summary",
     })
     url = f"{base_url.rstrip('/')}/rest/api/3/search/jql?{params}"
