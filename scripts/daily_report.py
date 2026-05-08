@@ -72,29 +72,24 @@ def fetch_jira_open_tickets(base_url: str, email: str, token: str, project_keys:
     else:
         jql = "statusCategory != Done ORDER BY created DESC"
 
-    params = urllib.parse.urlencode({
-        "jql": jql,
-        "maxResults": 1,
-        "fields": "summary",
-    })
-    url = f"{base_url.rstrip('/')}/rest/api/3/search/jql?{params}"
+    # Jira Cloud dropped `total` — paginate with cursor API and count locally
+    all_issues = []
+    next_page_token = None
+    while True:
+        params: dict = {"jql": jql, "maxResults": 100, "fields": "priority,assignee"}
+        if next_page_token:
+            params["nextPageToken"] = next_page_token
+        url = f"{base_url.rstrip('/')}/rest/api/3/search/jql?{urllib.parse.urlencode(params)}"
+        data = http_get(url, headers)
+        all_issues.extend(data.get("issues", []))
+        if data.get("isLast", True) or not data.get("nextPageToken"):
+            break
+        next_page_token = data["nextPageToken"]
 
-    data = http_get(url, headers)
-    print(f"  Jira response keys: {list(data.keys())}, total={data.get('total')}, issues_count={len(data.get('issues', []))}")
-    total = data.get("total", 0)
-
-    # Break down by priority for the top 50 issues
-    params_detail = urllib.parse.urlencode({
-        "jql": jql,
-        "maxResults": 50,
-        "fields": "priority,status,assignee",
-    })
-    url_detail = f"{base_url.rstrip('/')}/rest/api/3/search/jql?{params_detail}"
-    detail = http_get(url_detail, headers)
-
+    total = len(all_issues)
     priority_counts: dict[str, int] = {}
     unassigned = 0
-    for issue in detail.get("issues", []):
+    for issue in all_issues:
         fields = issue.get("fields", {})
         prio = (fields.get("priority") or {}).get("name", "None")
         priority_counts[prio] = priority_counts.get(prio, 0) + 1
