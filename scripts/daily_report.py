@@ -169,7 +169,7 @@ def build_adaptive_card(jira: dict, intercom: dict, report_date: str) -> dict:
     else:
         csat_text = "Keine Daten"
 
-    project_label = ", ".join(jira["project_keys"]) if jira["project_keys"] else "Alle Projekte"
+    project_label = "ANA, SUP, ENG, PUB, ACM, AD, INFRA, CORE, SYNC, KB"
 
     card_body = [
         {
