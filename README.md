@@ -7,7 +7,7 @@ Automatically fetches data from **Jira** and **Intercom** every weekday morning 
 | Source | Data |
 |--------|------|
 | Jira | Total open tickets, breakdown by priority, unassigned count |
-| Intercom | Open conversations, CSAT score (last 50 closed conversations) |
+| Intercom | Open conversations, CSAT score (last 7 days), NPS score (last 30 days) |
 
 ## Setup
 
@@ -35,6 +35,8 @@ Automatically fetches data from **Jira** and **Intercom** every weekday morning 
 1. Go to **Settings → Developers → Your app → Authentication**
 2. Copy the Access Token
 3. Add GitHub secret: `INTERCOM_ACCESS_TOKEN`
+
+> **Note on NPS:** The NPS score is fetched via Intercom's Data Export API, which runs an asynchronous export job (takes ~1–3 minutes). The token needs the `Read exports` permission. If no NPS surveys were completed in the last 30 days, "No data" is shown.
 
 ### 4. Adding secrets to GitHub
 
