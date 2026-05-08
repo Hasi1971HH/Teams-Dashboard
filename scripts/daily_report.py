@@ -80,6 +80,7 @@ def fetch_jira_open_tickets(base_url: str, email: str, token: str, project_keys:
     url = f"{base_url.rstrip('/')}/rest/api/3/search/jql?{params}"
 
     data = http_get(url, headers)
+    print(f"  Jira response keys: {list(data.keys())}, total={data.get('total')}, issues_count={len(data.get('issues', []))}")
     total = data.get("total", 0)
 
     # Break down by priority for the top 50 issues
