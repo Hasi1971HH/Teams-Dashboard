@@ -247,20 +247,12 @@ def build_adaptive_card(jira: dict, intercom: dict, report_date: str) -> dict:
         },
     ]
 
-    # Teams webhook expects this wrapper format
+    # Power Automate workflow webhook expects the Adaptive Card directly
     return {
-        "type": "message",
-        "attachments": [
-            {
-                "contentType": "application/vnd.microsoft.card.adaptive",
-                "content": {
-                    "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-                    "type": "AdaptiveCard",
-                    "version": "1.4",
-                    "body": card_body,
-                },
-            }
-        ],
+        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+        "type": "AdaptiveCard",
+        "version": "1.4",
+        "body": card_body,
     }
 
 # ---------------------------------------------------------------------------
