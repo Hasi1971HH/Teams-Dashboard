@@ -177,62 +177,48 @@ def build_adaptive_card(jira: dict, intercom: dict, report_date: str) -> dict:
             "size": "Large",
             "wrap": True,
         },
+        # Jira section
         {
-            "type": "ColumnSet",
-            "columns": [
-                {
-                    "type": "Column",
-                    "width": "stretch",
-                    "items": [
-                        {
-                            "type": "TextBlock",
-                            "text": "🟦 JIRA",
-                            "weight": "Bolder",
-                            "size": "Medium",
-                        },
-                        {
-                            "type": "TextBlock",
-                            "text": f"Projekte: {project_label}",
-                            "isSubtle": True,
-                            "size": "Small",
-                        },
-                        {
-                            "type": "FactSet",
-                            "facts": [
-                                {"title": "Offene Tickets gesamt", "value": str(jira["total"])},
-                                {"title": "Nicht zugewiesen", "value": str(jira["unassigned"])},
-                            ] + priority_facts,
-                        },
-                    ],
-                },
-                {
-                    "type": "Column",
-                    "width": "stretch",
-                    "items": [
-                        {
-                            "type": "TextBlock",
-                            "text": "💬 INTERCOM",
-                            "weight": "Bolder",
-                            "size": "Medium",
-                        },
-                        {
-                            "type": "TextBlock",
-                            "text": "Support-Übersicht",
-                            "isSubtle": True,
-                            "size": "Small",
-                        },
-                        {
-                            "type": "FactSet",
-                            "facts": [
-                                {
-                                    "title": "Offene Conversations",
-                                    "value": str(intercom["open_conversations"]),
-                                },
-                                {"title": "CSAT Score", "value": csat_text},
-                            ],
-                        },
-                    ],
-                },
+            "type": "TextBlock",
+            "text": "🟦 JIRA",
+            "weight": "Bolder",
+            "size": "Medium",
+            "spacing": "Medium",
+        },
+        {
+            "type": "TextBlock",
+            "text": f"Projekte: {project_label}",
+            "isSubtle": True,
+            "size": "Small",
+            "spacing": "None",
+        },
+        {
+            "type": "FactSet",
+            "facts": [
+                {"title": "Offene Tickets gesamt", "value": str(jira["total"])},
+                {"title": "Nicht zugewiesen", "value": str(jira["unassigned"])},
+            ] + priority_facts,
+        },
+        # Intercom section
+        {
+            "type": "TextBlock",
+            "text": "💬 INTERCOM",
+            "weight": "Bolder",
+            "size": "Medium",
+            "spacing": "Medium",
+        },
+        {
+            "type": "TextBlock",
+            "text": "Support-Übersicht",
+            "isSubtle": True,
+            "size": "Small",
+            "spacing": "None",
+        },
+        {
+            "type": "FactSet",
+            "facts": [
+                {"title": "Offene Conversations", "value": str(intercom["open_conversations"])},
+                {"title": "CSAT Score", "value": csat_text},
             ],
         },
         {
@@ -241,6 +227,7 @@ def build_adaptive_card(jira: dict, intercom: dict, report_date: str) -> dict:
             "isSubtle": True,
             "size": "Small",
             "wrap": True,
+            "spacing": "Medium",
         },
     ]
 
