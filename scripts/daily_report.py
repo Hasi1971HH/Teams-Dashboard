@@ -141,7 +141,7 @@ def fetch_intercom_open_conversations(token: str) -> dict:
         }, headers)
         total_open += resp.get("total_count", 0)
 
-    # CSAT: all rated conversations from the last 30 days
+    # CSAT: closed conversations from last 30 days, collect ratings
     thirty_days_ago = int(time.time()) - (30 * 24 * 3600)
     scores = []
     starting_after = None
@@ -153,8 +153,8 @@ def fetch_intercom_open_conversations(token: str) -> dict:
             "query": {
                 "operator": "AND",
                 "value": [
-                    {"field": "conversation_rating.rating", "operator": ">", "value": 0},
-                    {"field": "conversation_rating.created_at", "operator": ">", "value": thirty_days_ago},
+                    {"field": "state", "operator": "=", "value": "closed"},
+                    {"field": "updated_at", "operator": ">", "value": thirty_days_ago},
                 ],
             },
             "pagination": pagination,
