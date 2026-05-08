@@ -71,7 +71,7 @@ def fetch_jira_open_tickets(base_url: str, email: str, token: str, project_keys:
         " AND status NOT IN (Canceled, Closed, Done, Merged, PRODUCTION, Rejected)"
         " AND created >= -12w"
         " AND issuetype = Bug"
-        " AND project IN (ANA, SUP, ENG, PUB, ACM, AD, INFRA, CORE, SYNC, KB)"
+        " AND project IN (AD, ANA, ACM, CORE, ENG, INFRA, SUP, KB, PM, PUB, SYNC)"
         " ORDER BY created DESC"
     )
 
@@ -169,7 +169,7 @@ def build_adaptive_card(jira: dict, intercom: dict, report_date: str) -> dict:
     else:
         csat_text = "Keine Daten"
 
-    project_label = "ANA, SUP, ENG, PUB, ACM, AD, INFRA, CORE, SYNC, KB"
+    project_label = "AD, ANA, ACM, CORE, ENG, INFRA, SUP, KB, PM, PUB, SYNC"
 
     card_body = [
         {
