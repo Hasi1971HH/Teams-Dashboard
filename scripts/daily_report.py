@@ -48,6 +48,20 @@ def http_post(url: str, payload: dict, headers: dict | None = None) -> int:
         print(f"HTTP {e.code} posting to {url}: {body}", file=sys.stderr)
         raise
 
+def http_post_json(url: str, payload: dict, headers: dict | None = None) -> dict:
+    data = json.dumps(payload).encode()
+    h = {"Content-Type": "application/json"}
+    if headers:
+        h.update(headers)
+    req = urllib.request.Request(url, data=data, headers=h, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            return json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        body = e.read().decode()
+        print(f"HTTP {e.code} posting to {url}: {body}", file=sys.stderr)
+        raise
+
 def require_env(name: str) -> str:
     val = os.environ.get(name, "").strip()
     if not val:
@@ -122,7 +136,7 @@ def fetch_intercom_open_conversations(token: str) -> dict:
         "query": {"field": "state", "operator": "=", "value": "open"},
         "pagination": {"per_page": 1},
     }
-    data_open = http_post("https://api.intercom.io/conversations/search", search_payload, headers)
+    data_open = http_post_json("https://api.intercom.io/conversations/search", search_payload, headers)
     total_open = data_open.get("total_count", 0)
 
     # CSAT: fetch recent ratings via conversations rated endpoint
