@@ -66,12 +66,14 @@ def fetch_jira_open_tickets(base_url: str, email: str, token: str, project_keys:
         "Accept": "application/json",
     }
 
-    status_filter = 'statusCategory != Done AND status NOT IN (Canceled, Closed, Done, Merged, PRODUCTION, Rejected)'
-    if project_keys:
-        project_filter = " OR ".join(f'project = "{k}"' for k in project_keys)
-        jql = f"({project_filter}) AND {status_filter} ORDER BY created DESC"
-    else:
-        jql = f"{status_filter} ORDER BY created DESC"
+    jql = (
+        "statusCategory != Done"
+        " AND status NOT IN (Canceled, Closed, Done, Merged, PRODUCTION, Rejected)"
+        " AND created >= -12w"
+        " AND issuetype = Bug"
+        " AND project IN (ANA, SUP, ENG, PUB, ACM, AD, INFRA, CORE, SYNC, KB)"
+        " ORDER BY created DESC"
+    )
 
     # Jira Cloud dropped `total` — paginate with cursor API and count locally
     all_issues = []
