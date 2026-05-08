@@ -131,13 +131,14 @@ def fetch_intercom_open_conversations(token: str) -> dict:
         "Intercom-Version": "2.11",
     }
 
-    # Search for open conversations — GET state= filter is ignored by Intercom API
-    search_payload = {
-        "query": {"field": "state", "operator": "=", "value": "open"},
-        "pagination": {"per_page": 1},
-    }
-    data_open = http_post_json("https://api.intercom.io/conversations/search", search_payload, headers)
-    total_open = data_open.get("total_count", 0)
+    # Search for open + snoozed — GET state= filter is ignored by Intercom API
+    total_open = 0
+    for state in ("open", "snoozed"):
+        resp = http_post_json("https://api.intercom.io/conversations/search", {
+            "query": {"field": "state", "operator": "=", "value": state},
+            "pagination": {"per_page": 1},
+        }, headers)
+        total_open += resp.get("total_count", 0)
 
     # CSAT: fetch recent ratings via conversations rated endpoint
     # Intercom exposes CSAT through the /conversations endpoint with rating filters
