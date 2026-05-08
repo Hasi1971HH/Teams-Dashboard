@@ -1,0 +1,306 @@
+#!/usr/bin/env python3
+"""
+Daily report: fetches open tickets from Jira, open conversations and CSAT from Intercom,
+then posts an Adaptive Card to a Microsoft Teams channel via webhook.
+
+Required environment variables:
+  JIRA_BASE_URL        e.g. https://company.atlassian.net
+  JIRA_EMAIL           Atlassian account email
+  JIRA_API_TOKEN       Jira API token (https://id.atlassian.com/manage-profile/security/api-tokens)
+  JIRA_PROJECT_KEYS    comma-separated project keys, e.g. "PROJ,BACKEND" (optional, omit for all)
+  INTERCOM_ACCESS_TOKEN  Intercom access token
+  TEAMS_WEBHOOK_URL    Incoming webhook URL for the Teams channel
+"""
+
+import os
+import sys
+import json
+from datetime import datetime, timezone
+import urllib.request
+import urllib.error
+import base64
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def http_get(url: str, headers: dict) -> dict:
+    req = urllib.request.Request(url, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            return json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        body = e.read().decode()
+        print(f"HTTP {e.code} for {url}: {body}", file=sys.stderr)
+        raise
+
+def http_post(url: str, payload: dict, headers: dict | None = None) -> int:
+    data = json.dumps(payload).encode()
+    h = {"Content-Type": "application/json"}
+    if headers:
+        h.update(headers)
+    req = urllib.request.Request(url, data=data, headers=h, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            return resp.status
+    except urllib.error.HTTPError as e:
+        body = e.read().decode()
+        print(f"HTTP {e.code} posting to {url}: {body}", file=sys.stderr)
+        raise
+
+def require_env(name: str) -> str:
+    val = os.environ.get(name, "").strip()
+    if not val:
+        print(f"Missing required environment variable: {name}", file=sys.stderr)
+        sys.exit(1)
+    return val
+
+# ---------------------------------------------------------------------------
+# Jira
+# ---------------------------------------------------------------------------
+
+def fetch_jira_open_tickets(base_url: str, email: str, token: str, project_keys: list[str]) -> dict:
+    credentials = base64.b64encode(f"{email}:{token}".encode()).decode()
+    headers = {
+        "Authorization": f"Basic {credentials}",
+        "Accept": "application/json",
+    }
+
+    if project_keys:
+        project_filter = " OR ".join(f'project = "{k}"' for k in project_keys)
+        jql = f"({project_filter}) AND statusCategory != Done ORDER BY created DESC"
+    else:
+        jql = "statusCategory != Done ORDER BY created DESC"
+
+    params = urllib.parse.urlencode({
+        "jql": jql,
+        "maxResults": 0,
+        "fields": "summary",
+    })
+    url = f"{base_url.rstrip('/')}/rest/api/3/search?{params}"
+
+    data = http_get(url, headers)
+    total = data.get("total", 0)
+
+    # Break down by priority for the top 50 issues
+    params_detail = urllib.parse.urlencode({
+        "jql": jql,
+        "maxResults": 50,
+        "fields": "priority,status,assignee",
+    })
+    url_detail = f"{base_url.rstrip('/')}/rest/api/3/search?{params_detail}"
+    detail = http_get(url_detail, headers)
+
+    priority_counts: dict[str, int] = {}
+    unassigned = 0
+    for issue in detail.get("issues", []):
+        fields = issue.get("fields", {})
+        prio = (fields.get("priority") or {}).get("name", "None")
+        priority_counts[prio] = priority_counts.get(prio, 0) + 1
+        if not fields.get("assignee"):
+            unassigned += 1
+
+    return {
+        "total": total,
+        "priority_counts": priority_counts,
+        "unassigned": unassigned,
+        "project_keys": project_keys,
+    }
+
+# ---------------------------------------------------------------------------
+# Intercom
+# ---------------------------------------------------------------------------
+
+def fetch_intercom_open_conversations(token: str) -> dict:
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json",
+        "Intercom-Version": "2.11",
+    }
+
+    # Open conversations count
+    url_open = "https://api.intercom.io/conversations?state=open&per_page=1"
+    data_open = http_get(url_open, headers)
+    total_open = (data_open.get("pages") or {}).get("total_count", 0) or data_open.get("total_count", 0)
+
+    # CSAT: fetch recent ratings via conversations rated endpoint
+    # Intercom exposes CSAT through the /conversations endpoint with rating filters
+    url_rated = "https://api.intercom.io/conversations?state=closed&per_page=50"
+    data_rated = http_get(url_rated, headers)
+
+    scores = []
+    for conv in data_rated.get("conversations", []):
+        rating = (conv.get("conversation_rating") or {})
+        val = rating.get("rating")
+        if val is not None:
+            scores.append(int(val))
+
+    csat_avg = round(sum(scores) / len(scores), 2) if scores else None
+    csat_count = len(scores)
+
+    return {
+        "open_conversations": total_open,
+        "csat_avg": csat_avg,
+        "csat_count": csat_count,
+    }
+
+# ---------------------------------------------------------------------------
+# Teams Adaptive Card
+# ---------------------------------------------------------------------------
+
+def build_adaptive_card(jira: dict, intercom: dict, report_date: str) -> dict:
+    # Jira priority rows
+    priority_order = ["Highest", "High", "Medium", "Low", "Lowest", "None"]
+    priority_emoji = {
+        "Highest": "🔴", "High": "🟠", "Medium": "🟡",
+        "Low": "🔵", "Lowest": "⚪", "None": "⚫",
+    }
+
+    priority_facts = []
+    for prio in priority_order:
+        count = jira["priority_counts"].get(prio)
+        if count:
+            emoji = priority_emoji.get(prio, "•")
+            priority_facts.append({"title": f"{emoji} {prio}", "value": str(count)})
+
+    # CSAT display
+    if intercom["csat_avg"] is not None:
+        stars = "⭐" * round(intercom["csat_avg"])
+        csat_text = f"{intercom['csat_avg']:.1f} / 5  {stars}  ({intercom['csat_count']} Bewertungen)"
+    else:
+        csat_text = "Keine Daten"
+
+    project_label = ", ".join(jira["project_keys"]) if jira["project_keys"] else "Alle Projekte"
+
+    card_body = [
+        {
+            "type": "TextBlock",
+            "text": f"📊 Täglicher Report – {report_date}",
+            "weight": "Bolder",
+            "size": "Large",
+            "wrap": True,
+        },
+        {
+            "type": "ColumnSet",
+            "columns": [
+                {
+                    "type": "Column",
+                    "width": "stretch",
+                    "items": [
+                        {
+                            "type": "TextBlock",
+                            "text": "🟦 JIRA",
+                            "weight": "Bolder",
+                            "size": "Medium",
+                        },
+                        {
+                            "type": "TextBlock",
+                            "text": f"Projekte: {project_label}",
+                            "isSubtle": True,
+                            "size": "Small",
+                        },
+                        {
+                            "type": "FactSet",
+                            "facts": [
+                                {"title": "Offene Tickets gesamt", "value": str(jira["total"])},
+                                {"title": "Nicht zugewiesen", "value": str(jira["unassigned"])},
+                            ] + priority_facts,
+                        },
+                    ],
+                },
+                {
+                    "type": "Column",
+                    "width": "stretch",
+                    "items": [
+                        {
+                            "type": "TextBlock",
+                            "text": "💬 INTERCOM",
+                            "weight": "Bolder",
+                            "size": "Medium",
+                        },
+                        {
+                            "type": "TextBlock",
+                            "text": "Support-Übersicht",
+                            "isSubtle": True,
+                            "size": "Small",
+                        },
+                        {
+                            "type": "FactSet",
+                            "facts": [
+                                {
+                                    "title": "Offene Conversations",
+                                    "value": str(intercom["open_conversations"]),
+                                },
+                                {"title": "CSAT Score", "value": csat_text},
+                            ],
+                        },
+                    ],
+                },
+            ],
+        },
+        {
+            "type": "TextBlock",
+            "text": f"Generiert am {report_date} · automatisch via GitHub Actions",
+            "isSubtle": True,
+            "size": "Small",
+            "wrap": True,
+        },
+    ]
+
+    # Teams webhook expects this wrapper format
+    return {
+        "type": "message",
+        "attachments": [
+            {
+                "contentType": "application/vnd.microsoft.card.adaptive",
+                "content": {
+                    "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                    "type": "AdaptiveCard",
+                    "version": "1.4",
+                    "body": card_body,
+                },
+            }
+        ],
+    }
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+def main():
+    import urllib.parse  # noqa: PLC0415 – imported here to keep top-level clean
+
+    jira_base = require_env("JIRA_BASE_URL")
+    jira_email = require_env("JIRA_EMAIL")
+    jira_token = require_env("JIRA_API_TOKEN")
+    jira_projects_raw = os.environ.get("JIRA_PROJECT_KEYS", "").strip()
+    jira_projects = [k.strip() for k in jira_projects_raw.split(",") if k.strip()]
+
+    intercom_token = require_env("INTERCOM_ACCESS_TOKEN")
+    teams_webhook = require_env("TEAMS_WEBHOOK_URL")
+
+    report_date = datetime.now(tz=timezone.utc).strftime("%d.%m.%Y")
+
+    print("Fetching Jira data …")
+    jira_data = fetch_jira_open_tickets(jira_base, jira_email, jira_token, jira_projects)
+    print(f"  Jira open tickets: {jira_data['total']}")
+
+    print("Fetching Intercom data …")
+    intercom_data = fetch_intercom_open_conversations(intercom_token)
+    print(f"  Open conversations: {intercom_data['open_conversations']}, CSAT: {intercom_data['csat_avg']}")
+
+    print("Building Adaptive Card …")
+    card = build_adaptive_card(jira_data, intercom_data, report_date)
+
+    print("Posting to Teams …")
+    status = http_post(teams_webhook, card)
+    print(f"  Teams response status: {status}")
+
+    if status not in (200, 202):
+        print(f"Unexpected status {status}", file=sys.stderr)
+        sys.exit(1)
+
+    print("Done.")
+
+if __name__ == "__main__":
+    main()
