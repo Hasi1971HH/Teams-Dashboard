@@ -117,9 +117,9 @@ def fetch_intercom_open_conversations(token: str) -> dict:
         "Intercom-Version": "2.11",
     }
 
-    # Non-closed conversations — only "open" is a valid state filter in Intercom API
+    # Non-closed conversations — per_page=1 so total_pages == total matching items
     data_open = http_get("https://api.intercom.io/conversations?state=open&per_page=1", headers)
-    total_open = (data_open.get("pages") or {}).get("total_count", 0) or data_open.get("total_count", 0)
+    total_open = (data_open.get("pages") or {}).get("total_pages", 0)
 
     # CSAT: fetch recent ratings via conversations rated endpoint
     # Intercom exposes CSAT through the /conversations endpoint with rating filters
