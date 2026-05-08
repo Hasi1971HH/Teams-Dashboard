@@ -15,6 +15,7 @@ Required environment variables:
 import os
 import sys
 import json
+import time
 from datetime import datetime, timezone
 import urllib.request
 import urllib.error
@@ -140,17 +141,32 @@ def fetch_intercom_open_conversations(token: str) -> dict:
         }, headers)
         total_open += resp.get("total_count", 0)
 
-    # CSAT: fetch recent ratings via conversations rated endpoint
-    # Intercom exposes CSAT through the /conversations endpoint with rating filters
-    url_rated = "https://api.intercom.io/conversations?state=closed&per_page=50"
-    data_rated = http_get(url_rated, headers)
-
+    # CSAT: all rated conversations from the last 30 days
+    thirty_days_ago = int(time.time()) - (30 * 24 * 3600)
     scores = []
-    for conv in data_rated.get("conversations", []):
-        rating = (conv.get("conversation_rating") or {})
-        val = rating.get("rating")
-        if val is not None:
-            scores.append(int(val))
+    starting_after = None
+    while True:
+        pagination: dict = {"per_page": 150}
+        if starting_after:
+            pagination["starting_after"] = starting_after
+        resp = http_post_json("https://api.intercom.io/conversations/search", {
+            "query": {
+                "operator": "AND",
+                "value": [
+                    {"field": "conversation_rating.rating", "operator": ">", "value": 0},
+                    {"field": "conversation_rating.created_at", "operator": ">", "value": thirty_days_ago},
+                ],
+            },
+            "pagination": pagination,
+        }, headers)
+        for conv in resp.get("conversations", []):
+            val = (conv.get("conversation_rating") or {}).get("rating")
+            if val is not None:
+                scores.append(int(val))
+        next_cursor = (resp.get("pages") or {}).get("next", {})
+        starting_after = next_cursor.get("starting_after") if next_cursor else None
+        if not starting_after:
+            break
 
     csat_avg = round(sum(scores) / len(scores), 2) if scores else None
     csat_count = len(scores)
