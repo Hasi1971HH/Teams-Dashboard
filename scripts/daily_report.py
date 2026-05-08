@@ -279,7 +279,7 @@ def fetch_intercom_nps(token: str) -> dict:
 
     promoters = sum(1 for s in scores if s >= 9)
     detractors = sum(1 for s in scores if s <= 6)
-    nps = round(((promoters - detractors) / len(scores)) * 100)
+    nps = round(((promoters - detractors) / len(scores)) * 100, 1)
 
     return {"nps_score": nps, "nps_count": len(scores)}
 
@@ -315,7 +315,7 @@ def build_adaptive_card(jira: dict, intercom: dict, report_date: str) -> dict:
     nps_count = intercom.get("nps_count", 0)
     if nps_score is not None:
         sign = "+" if nps_score >= 0 else ""
-        nps_text = f"{sign}{nps_score}  ({nps_count} responses, last 30d)"
+        nps_text = f"{sign}{nps_score:.1f}  ({nps_count} responses, last 30d)"
     else:
         nps_text = "No data"
 
