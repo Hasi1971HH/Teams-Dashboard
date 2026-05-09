@@ -1,0 +1,22 @@
+name: Debug – Intercom Surveys API
+
+on:
+  workflow_dispatch:
+
+jobs:
+  debug:
+    name: Inspect Intercom Surveys
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run survey debug script
+        env:
+          INTERCOM_ACCESS_TOKEN: ${{ secrets.INTERCOM_ACCESS_TOKEN }}
+        run: python scripts/debug_intercom_surveys.py
