@@ -16,9 +16,6 @@ import os
 import sys
 import json
 import time
-import io
-import zipfile
-import csv
 from datetime import datetime, timezone
 import urllib.request
 import urllib.error
@@ -64,16 +61,6 @@ def http_post_json(url: str, payload: dict, headers: dict | None = None, timeout
     except urllib.error.HTTPError as e:
         body = e.read().decode()
         print(f"HTTP {e.code} posting to {url}: {body}", file=sys.stderr)
-        raise
-
-def http_get_bytes(url: str, headers: dict, timeout: int = 120) -> bytes:
-    req = urllib.request.Request(url, headers=headers)
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return resp.read()
-    except urllib.error.HTTPError as e:
-        body = e.read().decode()
-        print(f"HTTP {e.code} for {url}: {body}", file=sys.stderr)
         raise
 
 def require_env(name: str) -> str:
@@ -189,101 +176,67 @@ def fetch_intercom_open_conversations(token: str) -> dict:
     }
 
 def fetch_intercom_nps(token: str) -> dict:
-    """Fetch NPS score for the last 30 days via Intercom Data Export API."""
+    """Fetch NPS score for the last 30 days via Intercom Contacts Search API.
+
+    'NPS Score' is a custom contact attribute (0-10 integer). We search for
+    contacts updated in the last 30 days that have a score set (>= 0 covers
+    all valid NPS values including 0).
+    """
     headers = {
         "Authorization": f"Bearer {token}",
         "Accept": "application/json",
         "Intercom-Version": "2.11",
     }
 
-    now = int(time.time())
-    thirty_days_ago = now - (30 * 24 * 3600)
+    thirty_days_ago = int(time.time()) - (30 * 24 * 3600)
+    scores: list[int] = []
+    starting_after = None
 
-    # Start export job
-    try:
-        resp = http_post_json("https://api.intercom.io/export/content/data", {
-            "created_at_after": thirty_days_ago,
-            "created_at_before": now,
-        }, headers, timeout=30)
-    except Exception as e:
-        print(f"NPS export start failed: {e}", file=sys.stderr)
-        return {"nps_score": None, "nps_count": 0}
+    while True:
+        body: dict = {
+            "query": {
+                "operator": "AND",
+                "value": [
+                    {
+                        "field": "custom_attributes.NPS Score",
+                        "operator": ">=",
+                        "value": 0,
+                    },
+                    {
+                        "field": "updated_at",
+                        "operator": ">",
+                        "value": thirty_days_ago,
+                    },
+                ],
+            },
+            "pagination": {"per_page": 150},
+        }
+        if starting_after:
+            body["pagination"]["starting_after"] = starting_after
 
-    job_id = resp.get("job_identifier")
-    if not job_id:
-        print("NPS export: no job_identifier in response", file=sys.stderr)
-        return {"nps_score": None, "nps_count": 0}
-
-    # Poll until complete (max ~3 min: 15s first wait + 18 × 10s)
-    download_url = None
-    time.sleep(15)
-    for _ in range(18):
         try:
-            status_resp = http_get(
-                f"https://api.intercom.io/export/content/data/{job_id}", headers
+            resp = http_post_json(
+                "https://api.intercom.io/contacts/search", body, headers, timeout=30
             )
         except Exception as e:
-            print(f"NPS export poll failed: {e}", file=sys.stderr)
+            print(f"NPS contacts search failed: {e}", file=sys.stderr)
             return {"nps_score": None, "nps_count": 0}
 
-        status = status_resp.get("status")
-        print(f"  NPS export status: {status}")
-        if status == "complete":
-            download_url = status_resp.get("download_url")
+        for contact in resp.get("data", []):
+            score_val = (contact.get("custom_attributes") or {}).get("NPS Score")
+            if score_val is None:
+                continue
+            try:
+                score = int(float(str(score_val).strip()))
+                if 0 <= score <= 10:
+                    scores.append(score)
+            except (ValueError, AttributeError):
+                pass
+
+        next_cursor = ((resp.get("pages") or {}).get("next") or {}).get("starting_after")
+        if not next_cursor:
             break
-        if status in ("failed", "cancelled"):
-            print(f"NPS export job ended with status: {status}", file=sys.stderr)
-            return {"nps_score": None, "nps_count": 0}
-        time.sleep(10)
-    else:
-        print("NPS export timed out after 3 minutes", file=sys.stderr)
-        return {"nps_score": None, "nps_count": 0}
-
-    if not download_url:
-        # No data for the period
-        return {"nps_score": None, "nps_count": 0}
-
-    # Download ZIP
-    try:
-        zip_bytes = http_get_bytes(download_url, headers)
-    except Exception as e:
-        print(f"NPS export download failed: {e}", file=sys.stderr)
-        return {"nps_score": None, "nps_count": 0}
-
-    # Parse answer.csv: filter rows with response_type=rating_scale and a 0–10 score.
-    # This is language-agnostic — Intercom marks NPS questions as rating_scale regardless
-    # of the survey language.
-    scores: list[int] = []
-
-    try:
-        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
-            # Match answer CSVs regardless of directory prefix or exact naming:
-            # e.g. 'answer.csv', 'answer_12345.csv', 'company_answer_12345.csv'
-            answer_files = [
-                n for n in zf.namelist()
-                if "answer" in n.lower().split("/")[-1]
-                and "combined" not in n.lower()
-                and n.lower().endswith(".csv")
-            ]
-            for name in answer_files:
-                with zf.open(name) as f:
-                    reader = csv.DictReader(io.TextIOWrapper(f, encoding="utf-8-sig"))
-                    for row in reader:
-                        # Intercom exports use 'response_type' or 'answer_type' depending on version
-                        row_type = (row.get("response_type") or row.get("answer_type") or "").strip().lower()
-                        if row_type not in ("rating_scale", "rating"):
-                            continue
-                        # Value column is 'response' or 'value' depending on export version
-                        row_value = row.get("response") or row.get("value") or ""
-                        try:
-                            score = int(str(row_value).strip())
-                            if 0 <= score <= 10:
-                                scores.append(score)
-                        except (ValueError, AttributeError):
-                            pass
-    except Exception as e:
-        print(f"NPS ZIP parsing failed: {e}", file=sys.stderr)
-        return {"nps_score": None, "nps_count": 0}
+        starting_after = next_cursor
 
     if not scores:
         return {"nps_score": None, "nps_count": 0}
@@ -291,7 +244,6 @@ def fetch_intercom_nps(token: str) -> dict:
     promoters = sum(1 for s in scores if s >= 9)
     detractors = sum(1 for s in scores if s <= 6)
     nps = round(((promoters - detractors) / len(scores)) * 100, 1)
-
     return {"nps_score": nps, "nps_count": len(scores)}
 
 
@@ -429,7 +381,7 @@ def main():
     intercom_data = fetch_intercom_open_conversations(intercom_token)
     print(f"  Open conversations: {intercom_data['open_conversations']}, CSAT: {intercom_data['csat_avg']}")
 
-    print("Fetching Intercom NPS (Data Export, may take ~1–2 min) …")
+    print("Fetching Intercom NPS (Contacts Search) …")
     nps_data = fetch_intercom_nps(intercom_token)
     intercom_data.update(nps_data)
     print(f"  NPS score: {intercom_data['nps_score']} (n={intercom_data['nps_count']})")
