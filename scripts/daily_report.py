@@ -175,77 +175,6 @@ def fetch_intercom_open_conversations(token: str) -> dict:
         "csat_count": csat_count,
     }
 
-def fetch_intercom_nps(token: str) -> dict:
-    """Fetch NPS score for the last 30 days via Intercom Contacts Search API.
-
-    'NPS Score' is a custom contact attribute (0-10 integer). We search for
-    contacts updated in the last 30 days that have a score set (>= 0 covers
-    all valid NPS values including 0).
-    """
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Accept": "application/json",
-        "Intercom-Version": "2.11",
-    }
-
-    thirty_days_ago = int(time.time()) - (30 * 24 * 3600)
-    scores: list[int] = []
-    starting_after = None
-
-    while True:
-        body: dict = {
-            "query": {
-                "operator": "AND",
-                "value": [
-                    {
-                        "field": "custom_attributes.NPS Score",
-                        "operator": ">=",
-                        "value": 0,
-                    },
-                    {
-                        "field": "updated_at",
-                        "operator": ">",
-                        "value": thirty_days_ago,
-                    },
-                ],
-            },
-            "pagination": {"per_page": 150},
-        }
-        if starting_after:
-            body["pagination"]["starting_after"] = starting_after
-
-        try:
-            resp = http_post_json(
-                "https://api.intercom.io/contacts/search", body, headers, timeout=30
-            )
-        except Exception as e:
-            print(f"NPS contacts search failed: {e}", file=sys.stderr)
-            return {"nps_score": None, "nps_count": 0}
-
-        for contact in resp.get("data", []):
-            score_val = (contact.get("custom_attributes") or {}).get("NPS Score")
-            if score_val is None:
-                continue
-            try:
-                score = int(float(str(score_val).strip()))
-                if 0 <= score <= 10:
-                    scores.append(score)
-            except (ValueError, AttributeError):
-                pass
-
-        next_cursor = ((resp.get("pages") or {}).get("next") or {}).get("starting_after")
-        if not next_cursor:
-            break
-        starting_after = next_cursor
-
-    if not scores:
-        return {"nps_score": None, "nps_count": 0}
-
-    promoters = sum(1 for s in scores if s >= 9)
-    detractors = sum(1 for s in scores if s <= 6)
-    nps = round(((promoters - detractors) / len(scores)) * 100, 1)
-    return {"nps_score": nps, "nps_count": len(scores)}
-
 
 # ---------------------------------------------------------------------------
 # Teams Adaptive Card
@@ -272,15 +201,6 @@ def build_adaptive_card(jira: dict, intercom: dict, report_date: str) -> dict:
         csat_text = f"{intercom['csat_avg']:.1f} / 5  {stars}  ({intercom['csat_count']} ratings)"
     else:
         csat_text = "No data"
-
-    # NPS display
-    nps_score = intercom.get("nps_score")
-    nps_count = intercom.get("nps_count", 0)
-    if nps_score is not None:
-        sign = "+" if nps_score >= 0 else ""
-        nps_text = f"{sign}{nps_score:.1f}  ({nps_count} responses, last 30d)"
-    else:
-        nps_text = "No data"
 
     project_label = "AD, ANA, ACM, CORE, ENG, INFRA, SUP, KB, PM, PUB, SYNC"
 
@@ -334,7 +254,6 @@ def build_adaptive_card(jira: dict, intercom: dict, report_date: str) -> dict:
             "facts": [
                 {"title": "Open Conversations", "value": str(intercom["open_conversations"])},
                 {"title": "CSAT Score (7d)", "value": csat_text},
-                {"title": "NPS Score (30d)", "value": nps_text},
             ],
         },
         {
@@ -380,11 +299,6 @@ def main():
     print("Fetching Intercom conversations + CSAT …")
     intercom_data = fetch_intercom_open_conversations(intercom_token)
     print(f"  Open conversations: {intercom_data['open_conversations']}, CSAT: {intercom_data['csat_avg']}")
-
-    print("Fetching Intercom NPS (Contacts Search) …")
-    nps_data = fetch_intercom_nps(intercom_token)
-    intercom_data.update(nps_data)
-    print(f"  NPS score: {intercom_data['nps_score']} (n={intercom_data['nps_count']})")
 
     print("Building Adaptive Card …")
     card = build_adaptive_card(jira_data, intercom_data, report_date)
