@@ -381,17 +381,6 @@ def main():
     intercom_data = fetch_intercom_open_conversations(intercom_token)
     print(f"  Open conversations: {intercom_data['open_conversations']}, CSAT: {intercom_data['csat_avg']}")
 
-    # DEBUG: inspect Intercom Surveys API (remove after investigation)
-    print("DEBUG: checking /surveys endpoint …")
-    try:
-        surveys_resp = http_get(
-            "https://api.intercom.io/surveys",
-            {"Authorization": f"Bearer {intercom_token}", "Accept": "application/json", "Intercom-Version": "2.11"},
-        )
-        print(f"  /surveys response: {json.dumps(surveys_resp)[:3000]}")
-    except Exception as e:
-        print(f"  /surveys failed: {e}")
-
     print("Fetching Intercom NPS (Contacts Search) …")
     nps_data = fetch_intercom_nps(intercom_token)
     intercom_data.update(nps_data)
