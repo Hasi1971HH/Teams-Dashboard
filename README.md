@@ -55,7 +55,9 @@ That is the only change needed — neither the workflow file (`.github/workflows
 
 ## Schedule
 
-The workflow runs **Monday–Friday at 08:00 UTC** (09:00 CET / 10:00 CEST).
+The workflow is scheduled at **06:00 UTC Monday–Friday**, targeting a delivery time of around **10:00 CEST / 09:00 CET**.
+
+The cron is set 2 hours earlier than the target because GitHub Actions queues scheduled jobs during peak hours, which typically causes delays of 1–3 hours. Setting the cron earlier compensates for this.
 
 To change the time, edit the `cron` expression in `.github/workflows/daily-teams-report.yml`.
 
