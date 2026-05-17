@@ -55,7 +55,7 @@ That is the only change needed — neither the workflow file (`.github/workflows
 
 ## Schedule
 
-The workflow runs **Monday–Friday at 08:00 UTC** (09:00 CET / 10:00 CEST).
+The workflow runs **Monday–Friday at 03:00 UTC** (05:00 CEST / 04:00 CET).
 
 To change the time, edit the `cron` expression in `.github/workflows/daily-teams-report.yml`.
 
