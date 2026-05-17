@@ -42,6 +42,17 @@ Automatically fetches data from **Jira** and **Intercom** every weekday morning 
 
 Go to your repository → **Settings → Secrets and variables → Actions → New repository secret**.
 
+## Channel wechseln
+
+Der Ziel-Channel wird ausschließlich über die **Webhook-URL** gesteuert – es gibt keine Channel-ID im Code.
+
+Um in einen anderen Teams-Channel zu posten:
+
+1. Im gewünschten Channel in Teams: **···** → **Connectors** → **Incoming Webhook** → neue Webhook-URL erstellen und kopieren
+2. Im GitHub-Repository unter **Settings → Secrets and variables → Actions** den Secret `TEAMS_WEBHOOK_URL` aktualisieren – einfach den alten Wert mit der neuen URL überschreiben
+
+Das ist die einzige Stelle, die geändert werden muss. Weder der Workflow (`.github/workflows/daily-teams-report.yml`) noch das Script (`scripts/daily_report.py`) müssen angefasst werden.
+
 ## Schedule
 
 The workflow runs **Monday–Friday at 08:00 UTC** (09:00 CET / 10:00 CEST).
